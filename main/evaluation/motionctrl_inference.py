@@ -67,6 +67,7 @@ def load_model_checkpoint(model, ckpt, adapter_ckpt=None):
         print('>>> model checkpoint loaded.')
     return model
 
+# load trajectory function
 def load_trajs(cond_dir, trajs):
     traj_files = [f'{cond_dir}/trajectories/{traj}.npy' for traj in trajs]
 
@@ -79,6 +80,7 @@ def load_trajs(cond_dir, trajs):
     
     return data_list, traj_name
 
+# load camara pose function
 def load_camera_pose(cond_dir, camera_poses):
     
     pose_file = [f'{cond_dir}/camera_poses/{pose}.json' for pose in camera_poses]
