@@ -1,6 +1,6 @@
 
 
-ckpt='checkpoints/motionctrl_svd.ckpt'
+ckpt='../../model/motionctrl/motionctrl_svd.ckpt'
 config='configs/inference/config_motionctrl_cmcm.yaml'
 
 height=576
