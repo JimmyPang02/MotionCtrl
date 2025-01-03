@@ -9,5 +9,7 @@
 gradio_temp
 *.pth
 
+*.mp4
+
 assets/demo
 configs/training
