@@ -1,6 +1,6 @@
 #!/bin/bash
 
-config="configs/inference/config_both.yaml"
+config="configs/inference/config_both_webvid10.yaml"
 ckpt='../../model/motionctrl/motionctrl.pth'
 
 condtype='both'
@@ -14,24 +14,24 @@ if [ ! -d $res_dir ]; then
     mkdir -p $res_dir
 fi
 
-save_dir=$res_dir/$condtype'_seed'$seed
+save_dir=$res_dir/$condtype'_webvid10'
 
 use_ddp=0
 
 if [ $use_ddp == 0 ]; then
-python 'main/evaluation/motionctrl_inference.py' \
+python 'main/evaluation/motionctrl_inference_webvid10.py' \
 --seed 1234 \
 --ckpt_path $ckpt \
 --base $config \
 --savedir $save_dir \
 --n_samples 1 \
---bs 1 --height 256 --width 256 \
+--bs 1 --height 256 --width 256  \
 --unconditional_guidance_scale 7.5 \
 --ddim_steps 50 \
 --ddim_eta 1.0 \
 --condtype $condtype \
 --cond_dir $cond_dir \
-# --save_imgs
+--save_imgs
 fi
 
 if [ $use_ddp == 1 ]; then
