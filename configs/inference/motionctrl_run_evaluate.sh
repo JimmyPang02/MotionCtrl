@@ -14,7 +14,7 @@ if [ ! -d $res_dir ]; then
     mkdir -p $res_dir
 fi
 
-python main/inference/motionctrl_cmcm.py \
+python main/inference/motionctrl_cmcm_evaluate.py \
 --seed 12345 \
 --ckpt $ckpt \
 --config $config \
@@ -30,5 +30,5 @@ python main/inference/motionctrl_cmcm.py \
 --height $height --width $width \
 --sample_num 2 \
 --transform \
---pose_dir 'examples/camera_poses' \
+--pose_dir 'examples/camera_poses_evaluate' \
 --speed 2.0 
