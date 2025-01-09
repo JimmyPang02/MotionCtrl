@@ -304,11 +304,17 @@ def run_motionctrl(RealEstate10K_parsed_results):
             save_images=True,
             device="cuda"
         )
-        print(generated_videos, generated_frames)
+        print(.shape)
         """
         3. 根据推理测试结果，计算评估指标
         在线计算的指标可以在这里算，如torchmetric的FID
         """
+        # generated_videos 原视频文件路径(基本全是None，感觉轨迹对应的id和video名称对不上)
+        generated_frames=generated_frames[0] # 生成视频 torch.Size([14, 576, 1024, 3]) 
+        
+        
+        
+        
     
 """
 评估文件应该分成三部分：
