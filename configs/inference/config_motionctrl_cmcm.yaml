@@ -19,7 +19,7 @@ model:
     network_config:
       target: sgm.modules.diffusionmodules.video_model.VideoUNet
       params:
-        num_frames: 14
+        num_frames:  14 #25
         adm_in_channels: 768
         num_classes: sequential
         use_checkpoint: false
@@ -164,6 +164,6 @@ model:
         guider_config:
           target: sgm.modules.diffusionmodules.guiders.LinearPredictionGuider
           params:
-            num_frames: 14
+            num_frames:  14 #25
             max_scale: 2.5
             min_scale: 1.0

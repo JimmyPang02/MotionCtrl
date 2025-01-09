@@ -24,10 +24,6 @@ from sgm.util import default, instantiate_from_config
 
 print("motionctrl_run_evaluate")
 
-camera_poses = [
-    '304dd8f38dbeef0f_pose'
-]
-
 def to_relative_RT2(org_pose, keyframe_idx=0, keyframe_zero=False):
         org_pose = org_pose.reshape(-1, 3, 4) # [t, 3, 4]
         R_dst = org_pose[:, :, :3]
@@ -114,6 +110,7 @@ def sample(
 
     assert (version == "svd"), "Only SVD is supported for now."
     num_frames = default(num_frames, 14)
+    print(f"num_frames: {num_frames}")
     num_steps = default(num_steps, 25)
     output_folder = default(output_folder, "outputs/motionctrl_svd/")
     model_config = default(config, "configs/inference/config_motionctrl_cmcm.yaml")
@@ -158,6 +155,10 @@ def sample(
 
     print(f'loaded {len(all_img_paths)} images.')
     os.makedirs(output_folder, exist_ok=True)
+
+    all_videos = []
+    all_frames = []
+
     for no, input_img_path in enumerate(all_img_paths):
         
         filepath, fullflname = os.path.split(input_img_path)
@@ -273,7 +274,9 @@ def sample(
                     samples = samples.data.cpu()
 
                     video_path = os.path.join(output_folder, f"{filename}_{cur_pose_name}.mp4")
-                    save_results(samples, video_path, fps=save_fps)
+                    frames = save_results(samples, video_path, fps=save_fps)  # 获取生成的视频帧
+                    all_videos.append(video_path)
+                    all_frames.append(frames)
 
                     if save_images:
                         for i in range(sample_num):
@@ -284,14 +287,16 @@ def sample(
                                 torchvision.utils.save_image(samples[i,j], cur_img_path)
     
     print(f'Done! results saved in {output_folder}.')
+    return all_videos, all_frames  # 返回生成的视频路径和视频帧
 
-def save_results(resutls, filename, fps=10):
-    video = resutls.permute(1, 0, 2, 3, 4) # [t, sample_num, c, h, w]
+def save_results(results, filename, fps=10):
+    video = results.permute(1, 0, 2, 3, 4) # [t, sample_num, c, h, w]
     frame_grids = [torchvision.utils.make_grid(framesheet, nrow=int(video.shape[1])) for framesheet in video] #[3, 1*h, n*w]
     grid = torch.stack(frame_grids, dim=0) # stack in temporal dim [t, 3, n*h, w]
     # already in [0,1]
     grid = (grid * 255).to(torch.uint8).permute(0, 2, 3, 1)
     torchvision.io.write_video(filename, grid, fps=fps, video_codec='h264', options={'crf': '10'})
+    return grid  # 返回生成的视频帧
 
 def get_unique_embedder_keys_from_conditioner(conditioner):
     return list(set([x.input_key for x in conditioner.embedders]))
@@ -421,7 +426,7 @@ def run_motionctrl_inference(
     """
     # 这里等效于原脚本的 main + parser
     print("@MotionCrl+SVD Inference: Start function ...")
-    sample(
+    all_videos, all_frames=sample(
         input_path=image_input,
         ckpt=ckpt,
         config=config,
@@ -445,6 +450,8 @@ def run_motionctrl_inference(
         save_images=save_images,
         speed=speed
     )
+    
+    return all_videos, all_frames
 
 
 
