@@ -13,6 +13,8 @@ import torchvision
 from torchvision.io import read_video
 import json
 from main.inference.motionctrl_cmcm_evaluate import run_motionctrl_inference
+from torchmetrics.image.fid import FrechetInceptionDistance
+from torchvision import transforms
 
 import sys
 sys.path.append('../FVD')
@@ -106,7 +108,7 @@ def load_RealEstate10K(
     camera_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K_camera/test",
     dataset_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K/dataset/test",
     video_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K/videos/",
-    num_frames=25,
+    num_frames=14,
     sample_num=1000
 ):
     """
@@ -254,6 +256,11 @@ def run_motionctrl(RealEstate10K_parsed_results):
         # print(len(item["frame_paths"]))
         print("-------------------------------------------------\n")
 
+
+    # 初始化 FID 计算器
+    fid = FrechetInceptionDistance(feature=2048, reset_real_features=True, normalize=False, input_img_size=(3, 299, 299), feature_extractor_weights_path="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/model/FID/weights-inception-2015-12-05-6726825d.pth")
+    fid_values = [ ]
+        
     # 遍历 parsed_results，调用 run_motionctrl_inference（运行motionctrl测试）
     for idx, item in enumerate(RealEstate10K_parsed_results):
         video_id = item["video_id"]
@@ -263,7 +270,6 @@ def run_motionctrl(RealEstate10K_parsed_results):
         if not frame_paths:
             print(f"[{idx}] {video_id} has no frames, skip.")
             continue
-        
         
         # 取第 1 帧作为 input
         image_input = frame_paths[0]
@@ -304,18 +310,71 @@ def run_motionctrl(RealEstate10K_parsed_results):
             save_images=True,
             device="cuda"
         )
-        print(.shape)
         """
         3. 根据推理测试结果，计算评估指标
         在线计算的指标可以在这里算，如torchmetric的FID
         """
         # generated_videos 原视频文件路径(基本全是None，感觉轨迹对应的id和video名称对不上)
-        generated_frames=generated_frames[0] # 生成视频 torch.Size([14, 576, 1024, 3]) 
+        # generated_frames[0] 生成视频帧 torch.Size([14, 576, 1024, 3])
         
+        # 加载生成帧
+        generated_frames=generated_frames[0].permute(0, 3, 1, 2)  # [N, H, W, C] -> [N, C, H, W]
         
-        
-        
+        # 加载真实帧
+        real_frames = load_real_frames(frame_paths, height=576, width=1024)
+
+        # 计算FID
+        fid_value = calculate_fid(generated_frames, real_frames,fid)
+        fid_values.append(fid_value)
+
+    print(f"FID value: {fid_values}")
+
+
+def calculate_fid(generated_frames, real_frames, fid):
+    """
+    计算生成图像和真实图像之间的 FID 值。
+
+    参数:
+        generated_frames (torch.Tensor): 生成的图像张量，形状为 [N, C, H, W]。
+        real_frames (torch.Tensor): 真实的图像张量，形状为 [N, C, H, W]。
+        fid (FrechetInceptionDistance): 已经初始化的 FID 计算器。
+        N代表N张图
+
+    返回:
+        fid_value (float): FID 值。
+    """
+    print("-------------calculate_fid--------------")
+    print(generated_frames.shape)
+    print(real_frames.shape)
+    # 定义调整图像尺寸的 transform
+    resize_transform = transforms.Compose([
+        # transforms.Resize((299, 299)),  # 调整图像尺寸为 299x299
+        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # 归一化
+    ])
     
+    # 确保输入数据为 uint8 类型
+    if generated_frames.dtype != torch.uint8:
+        generated_frames = generated_frames.to(torch.uint8)
+    if real_frames.dtype != torch.uint8:
+        real_frames = real_frames.to(torch.uint8)
+
+    # 调整生成图像的尺寸
+    generated_frames_resized = torch.stack([resize_transform(frame) for frame in generated_frames])
+
+    # 调整真实图像的尺寸
+    real_frames_resized = torch.stack([resize_transform(frame) for frame in real_frames])
+
+    # 更新 FID 计算器
+    fid.update(real_frames_resized, real=True)
+    fid.update(generated_frames_resized, real=False)
+
+    # 计算 FID
+    fid_value = fid.compute()
+    print(f"FID: {fid_value}")
+    fid.reset()  # 重置 FID 计算器，以便下次使用
+    
+    return fid_value
+     
 """
 评估文件应该分成三部分：
 1. 加载RealEstate10K数据集
