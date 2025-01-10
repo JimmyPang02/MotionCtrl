@@ -15,10 +15,14 @@ import json
 from main.inference.motionctrl_cmcm_evaluate import run_motionctrl_inference
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision import transforms
+from torch.utils.tensorboard import SummaryWriter
 
 import sys
 sys.path.append('../FVD')
 # from frechet_video_distance import frechet_video_distance as fvd
+
+sys.path.append('/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/scripts')
+from check_norm import check_tensor_range
 
 """
 1. 加载RealEstate10K数据集
@@ -108,7 +112,7 @@ def load_RealEstate10K(
     camera_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K_camera/test",
     dataset_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K/dataset/test",
     video_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/public/zhengsixiao/RealEstate10K/videos/",
-    num_frames=14,
+    num_frames=25,
     sample_num=1000
 ):
     """
@@ -137,10 +141,6 @@ def load_RealEstate10K(
         # 获取视频ID（基于 txt 文件名）
         basename = os.path.splitext(os.path.basename(txt_path))[0]  # e.g., "2bec33eeeab0bb9d"
         
-        # debug
-        if cnt > 10:
-            print("break")
-            break
         
         # 如果所有文件都检查完了，退出循环
         if cnt >= len(txt_files):
@@ -187,7 +187,7 @@ def load_RealEstate10K(
 """
 1. 加载RealEstate10K数据集
 """
-def load_real_frames(frame_paths, height=576, width=1024):
+def load_real_frames(frame_paths, height=360, width=640):
     """
     从帧路径列表中加载帧图像，并调整大小。
     
@@ -201,7 +201,7 @@ def load_real_frames(frame_paths, height=576, width=1024):
     """
     real_frames = []
     for frame_path in frame_paths:
-        frame = torchvision.io.read_image(frame_path).float() / 255.0
+        frame = torchvision.io.read_image(frame_path).float() # / 255.0 # 归一化
         frame = torchvision.transforms.Resize((height, width))(frame)
         real_frames.append(frame)
     real_frames = torch.stack(real_frames, dim=0)
@@ -211,7 +211,7 @@ def load_real_frames(frame_paths, height=576, width=1024):
 """
 2. 把数据集转成对应测试模型(如motionctrl)的输入格式，并完成推理测试
 """
-def save_extrinsics_to_json(parsed_results, output_json_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/project/MotionCtrl/examples/camera_poses_evaluate"):
+def RealEstate2MotionCtrl(parsed_results, output_json_root="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/project/MotionCtrl/examples/camera_poses_evaluate"):
     """
     将从 load_RealEstate10K() 获取的相机外参（extrinsics）保存到指定 JSON 文件夹中
     将RealEstate10K 轨迹格式转为motionctrl的轨迹格式
@@ -243,7 +243,7 @@ def run_motionctrl(RealEstate10K_parsed_results):
     # motionctrl 相机外参保存路径
     output_pose_dir="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/project/MotionCtrl/examples/camera_poses_evaluate"
     # 保存相机外参到 JSON 文件(RealEstate轨迹转成motionctrl格式)
-    save_extrinsics_to_json(RealEstate10K_parsed_results, output_json_root=output_pose_dir)
+    RealEstate2MotionCtrl(RealEstate10K_parsed_results, output_json_root=output_pose_dir)
 
     # 打印前几个结果进行检查
     for item in parsed_results[:3]:
@@ -256,6 +256,8 @@ def run_motionctrl(RealEstate10K_parsed_results):
         # print(len(item["frame_paths"]))
         print("-------------------------------------------------\n")
 
+    # 初始化SummaryWriter
+    writer = SummaryWriter(log_dir='./runs/motionctrl')
 
     # 初始化 FID 计算器
     fid = FrechetInceptionDistance(feature=2048, reset_real_features=True, normalize=False, input_img_size=(3, 299, 299), feature_extractor_weights_path="/inspire/hdd/ws-f4d69b29-e0a5-44e6-bd92-acf4de9990f0/public-project/pengzimian-241108540199/model/FID/weights-inception-2015-12-05-6726825d.pth")
@@ -266,10 +268,6 @@ def run_motionctrl(RealEstate10K_parsed_results):
         video_id = item["video_id"]
         frame_paths = item["frame_paths"]
         extrinsics = item["extrinsics"]
-
-        if not frame_paths:
-            print(f"[{idx}] {video_id} has no frames, skip.")
-            continue
         
         # 取第 1 帧作为 input
         image_input = frame_paths[0]
@@ -321,13 +319,23 @@ def run_motionctrl(RealEstate10K_parsed_results):
         generated_frames=generated_frames[0].permute(0, 3, 1, 2)  # [N, H, W, C] -> [N, C, H, W]
         
         # 加载真实帧
-        real_frames = load_real_frames(frame_paths, height=576, width=1024)
+        real_frames = load_real_frames(frame_paths)
+        
+        print(f"generated_frames: {check_tensor_range(generated_frames)}")
+        print(f"real_frames:{check_tensor_range(real_frames)}")
 
         # 计算FID
         fid_value = calculate_fid(generated_frames, real_frames,fid)
         fid_values.append(fid_value)
-
+        
+        # 使用SummaryWriter记录FID值
+        writer.add_scalar('FID', fid_value, global_step=idx)
+        
     print(f"FID value: {fid_values}")
+    print(f"Mean FID: {np.mean(fid_values)}")
+    
+    # 关闭SummaryWriter
+    writer.close()
 
 
 def calculate_fid(generated_frames, real_frames, fid):
@@ -384,7 +392,7 @@ def calculate_fid(generated_frames, real_frames, fid):
 if __name__ == "__main__":
      
     # 获取测试数据集信息
-    parsed_results = load_RealEstate10K()
+    parsed_results = load_RealEstate10K(num_frames=25)
     print("RealEstate10K loaded")
     
     # 在对比模型上跑测试数据集，保存推理结果
@@ -394,3 +402,5 @@ if __name__ == "__main__":
     # 分为在线计算(torchmetric的FID可以不断update)和离线计算(得等结果都跑完保存成文件后，才能读取计算)
     # a. 在线计算 应该写在测试算法的run程序里
     # b. 离线计算 没必要写在这，独立开来写就行
+
+ 
